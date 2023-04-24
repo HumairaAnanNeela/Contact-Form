@@ -1,6 +1,9 @@
 package edu.ewubd.contactform;
 
 
+import androidx.activity.result.ActivityResultCallback;
+import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
@@ -13,6 +16,10 @@ import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
+import android.graphics.Canvas;
+import android.graphics.drawable.BitmapDrawable;
+import android.graphics.drawable.Drawable;
+import android.graphics.drawable.VectorDrawable;
 import android.net.Uri;
 import android.os.Bundle;
 import android.provider.MediaStore;
@@ -25,6 +32,7 @@ import android.widget.ImageView;
 import android.widget.TextView;
 import android.widget.Toast;
 import java.io.ByteArrayOutputStream;
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.util.concurrent.TimeUnit;
 
@@ -36,13 +44,9 @@ public class MainActivity extends AppCompatActivity {
     private ImageView contactPic;
 
     String name,image,email,phoneHome,phoneoffice;
-    String imageString;
-    String img;
+    String imageString = null;
 
     KeyValueDB db=new KeyValueDB(this);
-
-    int REQUEST_CODE_SELECT_IMAGE=200;
-    int GALLERY_REQ_CODE=300;
 
 
 
@@ -82,7 +86,6 @@ public class MainActivity extends AppCompatActivity {
         btnSave.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-
                 saveData();
             }
         });
@@ -90,41 +93,17 @@ public class MainActivity extends AppCompatActivity {
         contactPic.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-
-                Intent intent = new Intent(Intent.ACTION_PICK, MediaStore.Images.Media.EXTERNAL_CONTENT_URI);
-                startActivityForResult(intent, REQUEST_CODE_SELECT_IMAGE);
+                pickImageLauncher.launch("image/*");
 
 
             }
-
         });
 
 
+
+
     }
 
-    @Override
-    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
-        super.onActivityResult(requestCode, resultCode, data);
-        if (requestCode == REQUEST_CODE_SELECT_IMAGE && resultCode == RESULT_OK && data != null) {
-            Uri selectedImageUri = data.getData();
-            try {
-                Bitmap bitmap = MediaStore.Images.Media.getBitmap(this.getContentResolver(), selectedImageUri);
-                // Compress and convert the bitmap to a Base64 encoded string
-                ByteArrayOutputStream baos = new ByteArrayOutputStream();
-                bitmap.compress(Bitmap.CompressFormat.JPEG, 100, baos);
-                byte[] imageBytes = baos.toByteArray();
-                imageString = Base64.encodeToString(imageBytes, Base64.DEFAULT);
-
-                byte[] decodedBytes = Base64.decode(imageString, Base64.DEFAULT);
-                Bitmap decodedBitmap = BitmapFactory.decodeByteArray(decodedBytes, 0, decodedBytes.length);
-                // Do something with the imageString
-                contactPic.setImageBitmap(decodedBitmap);
-
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
-        }
-    }
 
 
 
@@ -146,20 +125,27 @@ public class MainActivity extends AppCompatActivity {
         if (email.isEmpty() || !Patterns.EMAIL_ADDRESS.matcher(email).matches()) {
             errorMessage+="Email is not valid\n";
         }
-        if(phoneHome.length()!=11){
-            if(phoneHome.charAt(0)!='0' && phoneHome.charAt(1)!='1'){
 
-                errorMessage+="Home Phone number is not valid(must be 11 digits starting with 01)\n";
+        if ( phoneHome.isEmpty() || phoneHome.length()!=11){
+           // errorMessage+="Home Phone number is not valid(must be 11 digits starting with 01)\n";
+            if(!phoneHome.isEmpty()) {
+                if (phoneHome.charAt(0) != '0' && phoneHome.charAt(1) != '1') {
 
+                    errorMessage += "Home Phone number is not valid(must be 11 digits starting with 01)\n";
+
+                }
             }
 
         }
 
-        if(phoneoffice.length()!=11){
-            if(phoneoffice.charAt(0)!='0' && phoneoffice.charAt(1)!='1'){
+        if ( phoneoffice.isEmpty() || phoneoffice.length()!=11 ){
+            // errorMessage+="Home Phone number is not valid(must be 11 digits starting with 01)\n";
+            if (!phoneoffice.isEmpty()) {
+                if (phoneoffice.charAt(0) != '0' && phoneoffice.charAt(1) != '1') {
 
-                errorMessage+="Office Phone number is not valid(must be 11 digits starting with 01)\n";
+                    errorMessage += "Office Phone number is not valid(must be 11 digits starting with 01)\n";
 
+                }
             }
 
         }
@@ -183,26 +169,54 @@ public class MainActivity extends AppCompatActivity {
                 .setPositiveButton(btn1,new DialogInterface.OnClickListener(){
                     public void onClick(DialogInterface dialog,int id){
                         if(flag==1){
-
-//                            try{
 //
+//                            try{
 //                                ByteArrayOutputStream baos = new ByteArrayOutputStream();
-//                                Bitmap bitmap = BitmapFactory.decodeResource(getResources(),R.drawable.image);
+//                                Bitmap bitmap = BitmapFactory.decodeResource(getResources(), R.drawable.image);
 //                                bitmap.compress(Bitmap.CompressFormat.JPEG, 100, baos);
 //                                byte[] imageBytes = baos.toByteArray();
 //                                imageString = Base64.encodeToString(imageBytes, Base64.DEFAULT);
-//
-//                                byte[] decodedBytes = Base64.decode(imageString, Base64.DEFAULT);
-//                                Bitmap decodedBitmap = BitmapFactory.decodeByteArray(decodedBytes, 0, decodedBytes.length);
-//                            // Do something with the imageString
-//                               contactPic.setImageBitmap(decodedBitmap);
 //                            }
 //                            catch (Exception e){
 //                                e.printStackTrace();
 //                            }
 
+                            if (contactPic.getDrawable() == null) {
+                                contactPic.setImageResource(R.drawable.image);
+                                Drawable drawable = contactPic.getDrawable();
+                                Bitmap bitmap = ((BitmapDrawable) drawable).getBitmap();
+                                ByteArrayOutputStream stream = new ByteArrayOutputStream();
+                                bitmap.compress(Bitmap.CompressFormat.PNG, 100, stream);
+                                byte[] byteArray = stream.toByteArray();
+                                imageString = Base64.encodeToString(byteArray, Base64.DEFAULT);
+                            } else {
+                                // Get the selected image
+                                Drawable drawable = contactPic.getDrawable();
+                                if (drawable instanceof BitmapDrawable) {
+                                    // Convert bitmap image to Base64 string
+                                    BitmapDrawable bitmapDrawable = (BitmapDrawable) drawable;
+                                    Bitmap bitmap = bitmapDrawable.getBitmap();
+                                    ByteArrayOutputStream stream = new ByteArrayOutputStream();
+                                    bitmap.compress(Bitmap.CompressFormat.PNG, 100, stream);
+                                    byte[] byteArray = stream.toByteArray();
+                                    imageString = Base64.encodeToString(byteArray, Base64.DEFAULT);
+                                } else if (drawable instanceof VectorDrawable) {
+                                    // Convert vector image to Base64 string
+                                    VectorDrawable vectorDrawable = (VectorDrawable) drawable;
+                                    Bitmap bitmap = Bitmap.createBitmap(vectorDrawable.getIntrinsicWidth(), vectorDrawable.getIntrinsicHeight(), Bitmap.Config.ARGB_8888);
+                                    Canvas canvas = new Canvas(bitmap);
+                                    vectorDrawable.setBounds(0, 0, canvas.getWidth(), canvas.getHeight());
+                                    vectorDrawable.draw(canvas);
+                                    ByteArrayOutputStream stream = new ByteArrayOutputStream();
+                                    bitmap.compress(Bitmap.CompressFormat.PNG, 100, stream);
+                                    byte[] byteArray = stream.toByteArray();
+                                    imageString = Base64.encodeToString(byteArray, Base64.DEFAULT);
+                                }
+                            }
+
                             long time = System.currentTimeMillis()/1000;
                             String uid = Long.toString(time);
+
 
                             String values = uid+"\n"+name+"\n"+email+"\n"+phoneHome+"\n"+phoneoffice+"\n"+imageString;
                             db.insertKeyValue(uid,values);
@@ -211,6 +225,7 @@ public class MainActivity extends AppCompatActivity {
                             emailEt.setText("");
                             phoneHomeEt.setText("");
                             phoneOfficeEt.setText("");
+                            contactPic.setImageResource(R.drawable.image);
                             String val= db.getValueByKey(uid);
                             System.out.println(val);
 
@@ -228,6 +243,30 @@ public class MainActivity extends AppCompatActivity {
         AlertDialog alert=builder.create();
         alert.show();
     }
+
+    private final ActivityResultLauncher<String> pickImageLauncher = registerForActivityResult(
+            new ActivityResultContracts.GetContent(),
+            new ActivityResultCallback<Uri>() {
+                @Override
+                public void onActivityResult(Uri result) {
+                    // Load the image into a Bitmap
+                    Bitmap bitmap = null;
+                    try {
+                        bitmap = BitmapFactory.decodeStream(getContentResolver().openInputStream(result));
+                    } catch (FileNotFoundException e) {
+                        e.printStackTrace();
+                    }
+
+                    Bitmap resizedBitmap = Bitmap.createScaledBitmap(bitmap, contactPic.getWidth(), contactPic.getHeight(), true);
+
+                    runOnUiThread(new Runnable() {
+                        @Override
+                        public void run() {
+                            contactPic.setImageBitmap(resizedBitmap);
+                        }
+                    });
+                }
+            });
 
 
 }
